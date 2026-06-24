@@ -592,24 +592,34 @@ export function applyMegaminxMove(s: MegaminxState, move: string): void {
 	const m = /^([RD])(\+\+|\-\-)$/.exec(move.toUpperCase());
 	const u = /^(U)([']?)$/.exec(move.toUpperCase());
 
-	let faceIdx: number;
-	let turns: number; // number of 72° CW turns
-
 	if (m) {
-		faceIdx = m[1] === 'R' ? 0 : 4; // R=0 (white), D=4 (yellow) — simplified
-		turns = m[2] === '++' ? 1 : 2;
+		const faceIdx = m[1] === 'R' ? 0 : 4; // R=0 (white), D=4 (yellow)
+		const turns = m[2] === '++' ? 1 : 2;
+		for (let t = 0; t < turns; t++) {
+			rotateMegaminxFace(s, faceIdx);
+		}
 	} else if (u) {
-		faceIdx = 0;
-		turns = u[2] === "'" ? 4 : 1;
-	} else {
-		return;
-	}
-
-	// Rotate face center and outer ring
-	for (let t = 0; t < turns; t++) {
-		rotateMegaminxFace(s, faceIdx);
+		const turns = u[2] === "'" ? 3 : 1; // U' = 3 * U
+		for (let t = 0; t < turns; t++) {
+			rotateMegaminxU(s);
+		}
 	}
 }
+
+/**
+ * Simplified megaminx face adjacency in the net layout:
+ *        [0]
+ *  [4] [3] [2] [1]
+ * [8] [7] [6] [5] [9]
+ *        [10]
+ *        [11]
+ *
+ * R face (index 0, top): edges touch faces 1,2,3,4
+ * D face (index 4, upper-left): edges touch faces 0,3,7,8
+ * U turn: rotates the top "ring" (faces 0-4) and bottom faces.
+ */
+const MEGA_R_ADJ = [1, 2, 3, 4]; // faces adjacent to R (face 0)
+const MEGA_D_ADJ = [3, 7, 8, 4]; // faces adjacent to D (face 4) - simplified
 
 function rotateMegaminxFace(s: MegaminxState, faceIdx: number): void {
 	const face = s.faces[faceIdx]!;
@@ -622,9 +632,29 @@ function rotateMegaminxFace(s: MegaminxState, faceIdx: number): void {
 	face[6] = edges[4]!;
 	for (let i = 7; i <= 10; i++) face[i] = edges[i - 7]!;
 
-	// For a real megaminx, adjacent face stickers also move.
-	// This is a simplified visual approximation — just rotate the face itself.
-	// Full adjacent face cycling requires more complex topology, skipped for simplicity.
+	// Swap corner and edge stickers with adjacent faces to make scramble visible
+	const adjFaces = faceIdx === 0 ? MEGA_R_ADJ : faceIdx === 4 ? MEGA_D_ADJ : [];
+	for (let ci = 0; ci < 4; ci++) {
+		const adjFaceIdx = adjFaces[ci]!;
+		const adjFace = s.faces[adjFaceIdx]!;
+		// Swap one corner and one edge between the faces
+		const tmpCorner = adjFace[1]!;
+		adjFace[1] = face[1 + ci]!;
+		face[1 + ci] = tmpCorner;
+		const tmpEdge = adjFace[6]!;
+		adjFace[6] = face[6 + ci]!;
+		face[6 + ci] = tmpEdge;
+	}
+}
+
+function rotateMegaminxU(s: MegaminxState): void {
+	// U turn: cycle faces [0,1,2,3,4] and [5,6,7,8,9]
+	// Upper ring: [0,1,2,3,4] → [4,0,1,2,3] (clockwise looking from top is 0→1→2→3→4→0)
+	// But U is defined differently, so just do a simple swap chain.
+	// Simplification: rotate each face in the upper and lower ring
+	for (const faceIdx of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+		rotateMegaminxFace(s, faceIdx);
+	}
 }
 
 export function applyMegaminxMoves(s: MegaminxState, seq: string): void {
