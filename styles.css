@@ -1,8 +1,23 @@
-/*
+/* Rubik's Cube Viewer Styles */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.cube-block {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	margin: 1em 0;
+	overflow-x: auto;
+}
 
-If your plugin does not need CSS, delete this file.
+.cube-block svg {
+	max-width: 100%;
+	height: auto;
+}
 
-*/
+.cube-error {
+	color: var(--text-error);
+	background: var(--background-modifier-error);
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-family: var(--font-monospace);
+	font-size: 0.9em;
+}

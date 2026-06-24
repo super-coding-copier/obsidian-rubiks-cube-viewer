@@ -1,11 +1,9 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "rubiks-cube-viewer",
+	"name": "Rubik's Cube Viewer",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Render Rubik's Cube diagrams from code blocks. Supports scramble and custom filling modes for 2x2 to 7x7 cubes.",
+	"author": "Your Name",
 	"isDesktopOnly": false
 }

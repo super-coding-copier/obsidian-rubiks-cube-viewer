@@ -1,114 +1,168 @@
-import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+import { Plugin } from 'obsidian';
+import { renderCube } from './cube-renderer';
+import { createCubeFromFilling } from './cube-simulator';
+import type { Face } from './colors';
+import { resolvePuzzleType, randomPuzzleType, isNxNCube, getNxNSize, invalidPuzzleMessage, type PuzzleType } from './puzzles/types';
+import { createPuzzleState, generateScramble, applyPuzzleMoves, type PuzzleState } from './puzzles/scramble-generator';
+import { renderPyraminx } from './puzzles/pyraminx-renderer';
+import { renderSkewb } from './puzzles/skewb-renderer';
+import { renderClock } from './puzzles/clock-renderer';
+import { renderSquareOne } from './puzzles/square-one-renderer';
+import { renderMegaminx } from './puzzles/megaminx-renderer';
 
-// Remember to rename these classes and interfaces!
+interface ParsedBlock {
+	puzzle: PuzzleType;  // resolved puzzle type
+	type: 'scramble' | 'filling';
+	data: string;        // remaining content after key:value lines
+}
 
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+/** Parse a key: value line. Returns [key, value] or null. */
+function parseKeyValue(line: string): [string, string] | null {
+	const m = /^([a-zA-Z_]+)\s*:\s*(.+)$/.exec(line);
+	if (!m) return null;
+	return [m[1]!.trim().toLowerCase(), m[2]!.trim()];
+}
 
+/** Parse the content of a ```cube code block */
+function parseBlock(content: string): ParsedBlock | { error: string } | null {
+	const lines = content.split('\n');
+	const kv: Record<string, string> = {};
+	const dataLines: string[] = [];
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (trimmed === '' || trimmed.startsWith('//')) {
+			continue;
+		}
+		const pair = parseKeyValue(trimmed);
+		if (pair) {
+			kv[pair[0]] = pair[1];
+		} else {
+			dataLines.push(trimmed);
+		}
+	}
+
+	// Resolve puzzle type from cube: key
+	const cubeStr = kv['cube'] ?? '3x3';
+	let puzzle = resolvePuzzleType(cubeStr);
+
+	if (!puzzle) {
+		return { error: invalidPuzzleMessage(cubeStr) };
+	}
+
+	// Handle random type
+	if (puzzle === 'random') {
+		puzzle = randomPuzzleType();
+	}
+
+	// Parse type
+	const typeStr = (kv['type'] ?? 'scramble').toLowerCase();
+	if (typeStr !== 'scramble' && typeStr !== 'filling') return null;
+
+	// filling mode only valid for NxN cubes
+	if (typeStr === 'filling' && !isNxNCube(puzzle)) {
+		return { error: `Filling mode is only supported for NxN cubes (2x2-7x7), not "${puzzle}".` };
+	}
+
+	return {
+		puzzle,
+		type: typeStr,
+		data: dataLines.join('\n').trim(),
+	};
+}
+
+/** Render a puzzle state to SVG based on its type */
+function renderPuzzle(state: PuzzleState): SVGSVGElement {
+	switch (state.type) {
+		case 'cube':
+			return renderCube(state.data);
+		case 'pyraminx':
+			return renderPyraminx(state.data);
+		case 'skewb':
+			return renderSkewb(state.data);
+		case 'clock':
+			return renderClock(state.data);
+		case 'square-one':
+			return renderSquareOne(state.data);
+		case 'megaminx':
+			return renderMegaminx(state.data);
+	}
+}
+
+export default class RubiksCubePlugin extends Plugin {
 	async onload() {
-		await this.loadSettings();
+		this.registerMarkdownCodeBlockProcessor(
+			'cube',
+			(_source, el, _ctx) => {
+				try {
+					const parsed = parseBlock(_source);
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
+					if (!parsed) {
+						el.createDiv({ cls: 'cube-error', text: 'Invalid cube block format.' });
+						return;
 					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+					if ('error' in parsed) {
+						el.createDiv({ cls: 'cube-error', text: parsed.error });
+						return;
+					}
+
+					let state: PuzzleState;
+					if (parsed.type === 'scramble') {
+						state = createPuzzleState(parsed.puzzle);
+						if (parsed.data) {
+							applyPuzzleMoves(state, parsed.data);
+						} else {
+							// Generate a random scramble
+							const scramble = generateScramble(parsed.puzzle);
+							applyPuzzleMoves(state, scramble);
+						}
+					} else {
+						// filling mode: NxN cubes only (already validated)
+						const n = getNxNSize(parsed.puzzle);
+						const faceColors = parseFillingData(parsed.data, n);
+						state = {
+							type: 'cube',
+							data: createCubeFromFilling(n, faceColors),
+						};
+					}
+
+					const svg = renderPuzzle(state);
+					const wrapper = el.createDiv({ cls: 'cube-block' });
+					wrapper.appendChild(svg);
+				} catch (e) {
+					el.createDiv({
+						cls: 'cube-error',
+						text: `Cube error: ${e instanceof Error ? e.message : String(e)}`,
+					});
 				}
-				return false;
 			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
 		);
 	}
 
 	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
 }
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
+/** Parse filling data lines into face color map. */
+function parseFillingData(
+	data: string,
+	n: number,
+): Partial<Record<Face, string>> {
+	const result: Partial<Record<Face, string>> = {};
+	if (!data) return result;
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+	const lines = data.split('\n');
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith('//')) continue;
+		const pair = parseKeyValue(trimmed);
+		if (!pair) continue;
+		const face = pair[0].toUpperCase() as Face;
+		let colors = pair[1];
+		colors = colors.replace(/[,，]/g, '').replace(/\s+/g, '');
+		if (colors.length >= n * n) {
+			result[face] = colors;
+		}
 	}
+	return result;
 }
