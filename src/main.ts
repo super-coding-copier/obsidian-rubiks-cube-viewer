@@ -9,6 +9,7 @@ import { renderSkewb } from './puzzles/skewb-renderer';
 import { renderClock } from './puzzles/clock-renderer';
 import { renderSquareOne } from './puzzles/square-one-renderer';
 import { renderMegaminx } from './puzzles/megaminx-renderer';
+import { DEFAULT_SETTINGS, RubiksCubeSettingTab, type RubiksCubeSettings } from './settings';
 
 interface ParsedBlock {
 	puzzle: PuzzleType;  // resolved puzzle type
@@ -24,7 +25,7 @@ function parseKeyValue(line: string): [string, string] | null {
 }
 
 /** Parse the content of a ```cube code block */
-function parseBlock(content: string): ParsedBlock | { error: string } | null {
+function parseBlock(content: string, defaultCubeKey: string): ParsedBlock | { error: string } | null {
 	const lines = content.split('\n');
 	const kv: Record<string, string> = {};
 	const dataLines: string[] = [];
@@ -43,7 +44,7 @@ function parseBlock(content: string): ParsedBlock | { error: string } | null {
 	}
 
 	// Resolve puzzle type from cube: key
-	const cubeStr = kv['cube'] ?? '3x3';
+	const cubeStr = kv['cube'] ?? defaultCubeKey;
 	let puzzle = resolvePuzzleType(cubeStr);
 
 	if (!puzzle) {
@@ -90,12 +91,19 @@ function renderPuzzle(state: PuzzleState): SVGSVGElement {
 }
 
 export default class RubiksCubePlugin extends Plugin {
+	settings!: RubiksCubeSettings;
+
 	async onload() {
+		await this.loadSettings();
+		this.addSettingTab(new RubiksCubeSettingTab(this.app, this));
+
+		const defaultCubeKey = this.settings.defaultPuzzle;
+
 		this.registerMarkdownCodeBlockProcessor(
 			'cube',
 			(_source, el, _ctx) => {
 				try {
-					const parsed = parseBlock(_source);
+					const parsed = parseBlock(_source, defaultCubeKey);
 
 					if (!parsed) {
 						el.createDiv({ cls: 'cube-error', text: 'Invalid cube block format.' });
@@ -138,6 +146,14 @@ export default class RubiksCubePlugin extends Plugin {
 				}
 			},
 		);
+	}
+
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
 	}
 
 	onunload() {}

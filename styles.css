@@ -21,3 +21,18 @@
 	font-family: var(--font-monospace);
 	font-size: 0.9em;
 }
+
+.cube-settings-info {
+	padding: 8px 0;
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+.cube-settings-info ul {
+	margin: 6px 0;
+	padding-left: 20px;
+}
+
+.cube-settings-info li {
+	margin: 2px 0;
+}
