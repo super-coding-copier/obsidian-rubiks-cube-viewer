@@ -97,13 +97,11 @@ export default class RubiksCubePlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new RubiksCubeSettingTab(this.app, this));
 
-		const defaultCubeKey = this.settings.defaultPuzzle;
-
 		this.registerMarkdownCodeBlockProcessor(
 			'cube',
 			(_source, el, _ctx) => {
 				try {
-					const parsed = parseBlock(_source, defaultCubeKey);
+					const parsed = parseBlock(_source, this.settings.defaultPuzzle);
 
 					if (!parsed) {
 						el.createDiv({ cls: 'cube-error', text: 'Invalid cube block format.' });

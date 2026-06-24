@@ -1,7 +1,7 @@
 {
 	"id": "rubiks-cube-viewer",
 	"name": "Rubik's Cube Viewer",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.0.0",
 	"description": "Render twisty puzzle diagrams from code blocks. Supports 10+ puzzle types: NxN cubes (2x2-7x7), Pyraminx, Skewb, Clock, Square-1, Megaminx and more.",
 	"author": "Rubik's Cube Viewer",
